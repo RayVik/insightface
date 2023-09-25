@@ -20,6 +20,7 @@ from .common import Face
 
 __all__ = ['FaceAnalysis']
 
+
 class FaceAnalysis:
     def __init__(self, name=DEFAULT_MP_NAME, root='~/.insightface', allowed_modules=None, **kwargs):
         onnxruntime.set_default_logger_severity(3)
@@ -43,19 +44,24 @@ class FaceAnalysis:
         assert 'detection' in self.models
         self.det_model = self.models['detection']
 
-
     def prepare(self, ctx_id, det_thresh=0.5, det_size=(640, 640)):
         self.det_thresh = det_thresh
         assert det_size is not None
         print('set det-size:', det_size)
         self.det_size = det_size
         for taskname, model in self.models.items():
-            if taskname=='detection':
+            if taskname == 'detection':
                 model.prepare(ctx_id, input_size=det_size, det_thresh=det_thresh)
             else:
                 model.prepare(ctx_id)
 
-    def get(self, img, max_num=0):
+    def get(self, img, max_num=0, mas_model=None):
+        if mas_model is None:
+            mas_model = ['landmark_3d_68',
+                         'landmark_2d_106',
+                         'genderage',
+                         'recognition']
+
         bboxes, kpss = self.det_model.detect(img,
                                              max_num=max_num,
                                              metric='default')
@@ -70,7 +76,7 @@ class FaceAnalysis:
                 kps = kpss[i]
             face = Face(bbox=bbox, kps=kps, det_score=det_score)
             for taskname, model in self.models.items():
-                if taskname=='detection':
+                if taskname == 'detection' or taskname not in mas_model:
                     continue
                 model.get(img, face)
             ret.append(face)
@@ -86,7 +92,7 @@ class FaceAnalysis:
             cv2.rectangle(dimg, (box[0], box[1]), (box[2], box[3]), color, 2)
             if face.kps is not None:
                 kps = face.kps.astype(int)
-                #print(landmark.shape)
+                # print(landmark.shape)
                 for l in range(kps.shape[0]):
                     color = (0, 0, 255)
                     if l == 0 or l == 3:
@@ -94,9 +100,10 @@ class FaceAnalysis:
                     cv2.circle(dimg, (kps[l][0], kps[l][1]), 1, color,
                                2)
             if face.gender is not None and face.age is not None:
-                cv2.putText(dimg,'%s,%d'%(face.sex,face.age), (box[0]-1, box[1]-4),cv2.FONT_HERSHEY_COMPLEX,0.7,(0,255,0),1)
+                cv2.putText(dimg, '%s,%d' % (face.sex, face.age), (box[0] - 1, box[1] - 4), cv2.FONT_HERSHEY_COMPLEX,
+                            0.7, (0, 255, 0), 1)
 
-            #for key, value in face.items():
+            # for key, value in face.items():
             #    if key.startswith('landmark_3d'):
             #        print(key, value.shape)
             #        print(value[0:10,:])
@@ -106,4 +113,3 @@ class FaceAnalysis:
             #            cv2.circle(dimg, (lmk[l][0], lmk[l][1]), 1, color,
             #                       2)
         return dimg
-
